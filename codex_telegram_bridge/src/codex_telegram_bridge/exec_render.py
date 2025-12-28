@@ -94,8 +94,10 @@ def format_reasoning(text: str) -> str:
     return f"_{text}_"
 
 
-def format_item_action_line(etype: str, item: dict[str, Any]) -> str | None:
+def format_item_line(etype: str, item: dict[str, Any]) -> str | None:
     match (item["type"], etype):
+        case ("reasoning", "item.completed"):
+            return format_reasoning(item["text"])
         case ("command_execution", "item.started"):
             command = format_command(item["command"])
             return f"{STATUS_RUNNING} running: {command}"
@@ -110,20 +112,12 @@ def format_item_action_line(etype: str, item: dict[str, Any]) -> str | None:
         case ("mcp_tool_call", "item.completed"):
             name = format_tool_call(item["server"], item["tool"])
             return f"{STATUS_DONE} tool: {name}"
-        case _:
-            return None
-
-
-def format_item_completed_line(item: dict[str, Any]) -> str | None:
-    match item["type"]:
-        case "reasoning":
-            return format_reasoning(item["text"])
-        case "web_search":
+        case ("web_search", "item.completed"):
             query = format_query(item["query"])
             return f"{STATUS_DONE} searched: {query}"
-        case "file_change":
+        case ("file_change", "item.completed"):
             return f"{STATUS_DONE} {format_file_change(item['changes'])}"
-        case "error":
+        case ("error", "item.completed"):
             warning = truncate(item["message"], 120)
             return f"{STATUS_DONE} warning: {warning}"
         case _:
@@ -170,13 +164,9 @@ def render_event_cli(
                     lines.append("assistant:")
                     lines.extend(indent(item["text"], "  ").splitlines())
                 case _:
-                    action_line = format_item_action_line(etype, item)
-                    if action_line is not None:
-                        lines.append(attach_id(item_num, action_line))
-                    elif etype == "item.completed":
-                        completed_line = format_item_completed_line(item)
-                        if completed_line is not None:
-                            lines.append(attach_id(item_num, completed_line))
+                    line = format_item_line(etype, item)
+                    if line is not None:
+                        lines.append(attach_id(item_num, line))
             return lines
         case _:
             return lines
@@ -201,20 +191,15 @@ class ExecProgressRenderer:
                     case "agent_message":
                         return False
                     case _:
-                        action_line = format_item_action_line(etype, item)
-                        if action_line is not None:
-                            full = attach_id(item_id, action_line)
+                        line = format_item_line(etype, item)
+                        if line is not None:
+                            full = attach_id(item_id, line)
                             if etype == "item.completed" and self.state.recent_actions:
                                 last = self.state.recent_actions[-1]
                                 if last.startswith(f"[{item_id}] {STATUS_RUNNING} "):
                                     self.state.recent_actions.pop()
                             self.state.recent_actions.append(full)
                             return True
-                        if etype == "item.completed":
-                            completed_line = format_item_completed_line(item)
-                            if completed_line is not None:
-                                self.state.recent_actions.append(attach_id(item_id, completed_line))
-                                return True
                         return False
             case _:
                 return False
