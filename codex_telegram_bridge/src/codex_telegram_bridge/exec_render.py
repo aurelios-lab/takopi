@@ -26,10 +26,6 @@ def truncate(text: str, max_len: int) -> str:
     return one_line(text)[:max_len]
 
 
-def inline_code(text: str) -> str:
-    return f"`{text}`"
-
-
 def format_elapsed(elapsed_s: float) -> str:
     total = max(0, int(elapsed_s))
     minutes, seconds = divmod(total, 60)
@@ -52,7 +48,7 @@ def format_command(command: str) -> str:
     command = truncate(command, MAX_CMD_LEN)
     if not command:
         command = "(empty)"
-    return inline_code(command)
+    return f"`{command}`"
 
 
 def format_query(query: str) -> str:
@@ -62,7 +58,7 @@ def format_query(query: str) -> str:
 def format_paths(paths: list[str]) -> str:
     rendered = []
     for path in paths:
-        rendered.append(inline_code(truncate(path, MAX_PATH_LEN)))
+        rendered.append(f"`{truncate(path, MAX_PATH_LEN)}`")
     return ", ".join(rendered)
 
 
