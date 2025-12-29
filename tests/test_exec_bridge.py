@@ -41,9 +41,7 @@ def test_resolve_resume_session_prefers_message_text() -> None:
     uuid_reply = "019b66fc-64c2-7a71-81cd-081c504cfeb2"
 
     assert (
-        resolve_resume_session(
-            f"resume: `{uuid_message}`", f"resume: `{uuid_reply}`"
-        )
+        resolve_resume_session(f"resume: `{uuid_message}`", f"resume: `{uuid_reply}`")
         == uuid_message
     )
 
@@ -51,7 +49,10 @@ def test_resolve_resume_session_prefers_message_text() -> None:
 def test_resolve_resume_session_uses_reply_when_missing() -> None:
     uuid_reply = "019b66fc-64c2-7a71-81cd-081c504cfeb2"
 
-    assert resolve_resume_session("no resume here", f"resume: `{uuid_reply}`") == uuid_reply
+    assert (
+        resolve_resume_session("no resume here", f"resume: `{uuid_reply}`")
+        == uuid_reply
+    )
 
 
 def test_truncate_for_telegram_preserves_resume_line() -> None:
@@ -143,7 +144,11 @@ class _FakeRunner:
         self._saw_agent_message = saw_agent_message
 
     async def run_serialized(self, *_args, **_kwargs) -> tuple[str, str, bool]:
-        return ("019b66fc-64c2-7a71-81cd-081c504cfeb2", self._answer, self._saw_agent_message)
+        return (
+            "019b66fc-64c2-7a71-81cd-081c504cfeb2",
+            self._answer,
+            self._saw_agent_message,
+        )
 
 
 class _FakeClock:

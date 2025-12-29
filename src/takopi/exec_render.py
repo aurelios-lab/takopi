@@ -130,15 +130,27 @@ def format_event(
                         exit_part = ""
                     else:
                         status = STATUS_FAIL if exit_code is not None else STATUS_DONE
-                        exit_part = f" (exit {exit_code})" if exit_code is not None else ""
+                        exit_part = (
+                            f" (exit {exit_code})" if exit_code is not None else ""
+                        )
                     line = prefix + f"{status} {command}{exit_part}"
                     return last_item, [line], line, prefix
                 case ("mcp_tool_call", "item.started"):
-                    name = ".".join(part for part in (item["server"], item["tool"]) if part) or "tool"
+                    name = (
+                        ".".join(
+                            part for part in (item["server"], item["tool"]) if part
+                        )
+                        or "tool"
+                    )
                     line = prefix + f"{STATUS_RUNNING} tool: {name}"
                     return last_item, [line], line, prefix
                 case ("mcp_tool_call", "item.completed"):
-                    name = ".".join(part for part in (item["server"], item["tool"]) if part) or "tool"
+                    name = (
+                        ".".join(
+                            part for part in (item["server"], item["tool"]) if part
+                        )
+                        or "tool"
+                    )
                     line = prefix + f"{STATUS_DONE} tool: {name}"
                     return last_item, [line], line, prefix
                 case ("web_search", "item.completed"):
@@ -146,12 +158,20 @@ def format_event(
                     line = prefix + f"{STATUS_DONE} searched: {query}"
                     return last_item, [line], line, prefix
                 case ("file_change", "item.completed"):
-                    paths = [change["path"] for change in item["changes"] if change.get("path")]
+                    paths = [
+                        change["path"]
+                        for change in item["changes"]
+                        if change.get("path")
+                    ]
                     if not paths:
                         total = len(item["changes"])
-                        desc = "updated files" if total == 0 else f"updated {total} files"
+                        desc = (
+                            "updated files" if total == 0 else f"updated {total} files"
+                        )
                     elif len(paths) <= 3:
-                        desc = "updated " + ", ".join(f"`{_shorten_path(p, MAX_PATH_LEN)}`" for p in paths)
+                        desc = "updated " + ", ".join(
+                            f"`{_shorten_path(p, MAX_PATH_LEN)}`" for p in paths
+                        )
                     else:
                         desc = f"updated {len(paths)} files"
                     line = prefix + f"{STATUS_DONE} {desc}"
@@ -200,7 +220,11 @@ class ExecProgressRenderer:
             return False
 
         # Replace the preceding "running" line for the same item on completion.
-        if event["type"] == "item.completed" and progress_prefix and self.recent_actions:
+        if (
+            event["type"] == "item.completed"
+            and progress_prefix
+            and self.recent_actions
+        ):
             last = self.recent_actions[-1]
             if last.startswith(progress_prefix + f"{STATUS_RUNNING} "):
                 self.recent_actions.pop()

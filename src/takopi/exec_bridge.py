@@ -41,9 +41,7 @@ def extract_session_id(text: str | None) -> str | None:
     return found
 
 
-def resolve_resume_session(
-    text: str | None, reply_text: str | None
-) -> str | None:
+def resolve_resume_session(text: str | None, reply_text: str | None) -> str | None:
     return extract_session_id(text) or extract_session_id(reply_text)
 
 
@@ -124,9 +122,7 @@ def truncate_for_telegram(text: str, limit: int) -> str:
     return (head + sep + tail)[:limit]
 
 
-def prepare_telegram(
-    md: str, *, limit: int
-) -> tuple[str, list[dict[str, Any]] | None]:
+def prepare_telegram(md: str, *, limit: int) -> tuple[str, list[dict[str, Any]] | None]:
     rendered, entities = render_markdown(md)
     if len(rendered) > limit:
         rendered = truncate_for_telegram(rendered, limit)
@@ -655,9 +651,7 @@ async def _run_main_loop(cfg: BridgeConfig) -> None:
                 r = msg.get("reply_to_message") or {}
                 resume_session = resolve_resume_session(text, r.get("text"))
 
-                await queue.put(
-                    (msg["chat"]["id"], user_msg_id, text, resume_session)
-                )
+                await queue.put((msg["chat"]["id"], user_msg_id, text, resume_session))
     finally:
         await cfg.bot.close()
 

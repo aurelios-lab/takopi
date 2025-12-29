@@ -81,7 +81,10 @@ def test_render_event_cli_all_formats_fixture() -> None:
     assert any(line.startswith("stream error:") for line in out)
     assert any(line.startswith("4. ▸ `pytest -q`") for line in out)
     assert any("✗ `pytest -q` (exit 1)" in line for line in out)
-    assert any("searched: python jsonlines parser handle unknown fields" in line for line in out)
+    assert any(
+        "searched: python jsonlines parser handle unknown fields" in line
+        for line in out
+    )
     assert any("tool: github.search_issues" in line for line in out)
     assert any("updated `src/compute_answer.py`" in line for line in out)
     assert any(

@@ -16,7 +16,5 @@ def test_render_markdown_code_fence_language_is_string() -> None:
 
     assert text == "print('x')\n\n"
     assert entities is not None
-    assert any(
-        e.get("type") == "pre" and e.get("language") == "py" for e in entities
-    )
+    assert any(e.get("type") == "pre" and e.get("language") == "py" for e in entities)
     assert any(e.get("type") == "code" for e in entities)
