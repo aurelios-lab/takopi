@@ -38,9 +38,7 @@ def _codex_check_setup(_config: EngineConfig, _config_path: Path) -> list[SetupI
     return []
 
 
-def _codex_build_runner(
-    config: EngineConfig, config_path: Path
-) -> Runner:
+def _codex_build_runner(config: EngineConfig, config_path: Path) -> Runner:
     codex_cmd = shutil.which("codex")
     if not codex_cmd:
         raise ConfigError(

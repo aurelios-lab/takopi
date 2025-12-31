@@ -66,4 +66,3 @@ def test_translate_mcp_tool_call_summarizes_legacy_structured_key() -> None:
     assert len(out) == 1
     assert isinstance(out[0], ActionEvent)
     assert out[0].action.detail["result_summary"]["has_structured"] is True
-

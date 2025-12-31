@@ -81,7 +81,8 @@ def test_render_event_cli_handles_action_kinds() -> None:
     )
     assert any("tool: github.search_issues" in line for line in out)
     assert any(
-        "files: added `README.md`, updated `src/compute_answer.py`" in line for line in out
+        "files: added `README.md`, updated `src/compute_answer.py`" in line
+        for line in out
     )
     assert any(line.startswith("✗ stream error") for line in out)
 
@@ -103,7 +104,9 @@ def test_file_change_renders_relative_paths_inside_cwd() -> None:
             },
         )
     )
-    assert any("files: updated `README.md`, updated `README.md`" in line for line in out)
+    assert any(
+        "files: updated `README.md`, updated `README.md`" in line for line in out
+    )
 
 
 def test_progress_renderer_renders_progress_and_final() -> None:
