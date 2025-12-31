@@ -19,8 +19,6 @@ HARD_BREAK = "  \n"
 MAX_PROGRESS_CMD_LEN = 300
 MAX_FILE_CHANGES_INLINE = 3
 
-FILE_CHANGE_VERB = {"add": "added", "delete": "deleted", "update": "updated"}
-
 
 def format_changed_file_path(path: str, *, base_dir: Path | None = None) -> str:
     raw = path.strip()
@@ -104,11 +102,7 @@ def format_file_change_title(action: Action, *, command_width: int | None) -> st
             if not isinstance(path, str) or not path:
                 continue
             kind = raw.get("kind")
-            verb = (
-                FILE_CHANGE_VERB.get(kind, "updated")
-                if isinstance(kind, str)
-                else "updated"
-            )
+            verb = kind if isinstance(kind, str) and kind else "update"
             rendered.append(f"{verb} {format_changed_file_path(path)}")
 
         if rendered:
