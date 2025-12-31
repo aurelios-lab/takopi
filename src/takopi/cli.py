@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from typing import Any
 
 import anyio
 import typer
@@ -14,7 +13,6 @@ from .engines import (
     get_backend,
     get_engine_config,
     list_backend_ids,
-    parse_engine_overrides,
 )
 from .logging import setup_logging
 from .onboarding import check_setup, render_setup_guide
@@ -35,7 +33,6 @@ def _parse_bridge_config(
     *,
     final_notify: bool,
     backend: EngineBackend,
-    engine_overrides: dict[str, Any],
 ) -> BridgeConfig:
     startup_pwd = os.getcwd()
 
@@ -62,7 +59,7 @@ def _parse_bridge_config(
     startup_msg = backend.startup_message(startup_pwd)
 
     bot = TelegramClient(token)
-    runner = backend.build_runner(engine_cfg, engine_overrides, config_path)
+    runner = backend.build_runner(engine_cfg, config_path)
 
     return BridgeConfig(
         bot=bot,
@@ -96,22 +93,10 @@ def run(
         "--debug/--no-debug",
         help="Log engine JSONL, Telegram requests, and rendered messages.",
     ),
-    engine_option: list[str] = typer.Option(
-        [],
-        "--engine-option",
-        "-E",
-        help="Engine-specific override in KEY=VALUE form (repeatable).",
-        hidden=True,
-    ),
 ) -> None:
     setup_logging(debug=debug)
     try:
         backend = get_backend(engine)
-    except ConfigError as e:
-        typer.echo(str(e), err=True)
-        raise typer.Exit(code=1)
-    try:
-        overrides = parse_engine_overrides(engine_option)
     except ConfigError as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(code=1)
@@ -123,7 +108,6 @@ def run(
         cfg = _parse_bridge_config(
             final_notify=final_notify,
             backend=backend,
-            engine_overrides=overrides,
         )
     except ConfigError as e:
         typer.echo(str(e), err=True)

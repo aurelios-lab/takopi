@@ -12,8 +12,8 @@
 - migrate async runtime from asyncio to anyio [#6](https://github.com/banteg/takopi/pull/6)
 - stream runner events via async iterators (natural backpressure)
 - per-thread job queues with serialization for same-thread runs
-- emit `completed` as terminal event (carries resume + final answer)
-- render resume as `` `codex resume <token>` `` command lines
+- render resume as `codex resume <token>` command lines
+- various rendering improvements including file edits
 
 ### breaking
 

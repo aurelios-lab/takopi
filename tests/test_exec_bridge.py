@@ -34,7 +34,6 @@ def test_parse_bridge_config_rejects_empty_token(monkeypatch) -> None:
         cli._parse_bridge_config(
             final_notify=True,
             backend=engines.get_backend("codex"),
-            engine_overrides={},
         )
 
 
@@ -47,7 +46,6 @@ def test_parse_bridge_config_rejects_string_chat_id(monkeypatch) -> None:
         cli._parse_bridge_config(
             final_notify=True,
             backend=engines.get_backend("codex"),
-            engine_overrides={},
         )
 
 

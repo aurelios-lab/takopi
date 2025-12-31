@@ -10,7 +10,6 @@ from .runner import Runner
 from .runners.codex import CodexRunner
 
 EngineConfig = dict[str, Any]
-EngineOverrides = dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,7 +23,7 @@ class EngineBackend:
     id: str
     display_name: str
     check_setup: Callable[[EngineConfig, Path], list[SetupIssue]]
-    build_runner: Callable[[EngineConfig, EngineOverrides, Path], Runner]
+    build_runner: Callable[[EngineConfig, Path], Runner]
     startup_message: Callable[[str], str]
 
 
@@ -40,7 +39,7 @@ def _codex_check_setup(_config: EngineConfig, _config_path: Path) -> list[SetupI
 
 
 def _codex_build_runner(
-    config: EngineConfig, overrides: EngineOverrides, config_path: Path
+    config: EngineConfig, config_path: Path
 ) -> Runner:
     codex_cmd = shutil.which("codex")
     if not codex_cmd:
@@ -72,13 +71,6 @@ def _codex_build_runner(
             )
         extra_args.extend(["--profile", profile_value])
         title = profile_value
-
-    if overrides:
-        unknown = ", ".join(sorted(overrides))
-        raise ConfigError(
-            "Codex does not support --engine-option overrides yet. "
-            f"Remove: {unknown}"
-        )
 
     return CodexRunner(codex_cmd=codex_cmd, extra_args=extra_args, title=title)
 
@@ -114,19 +106,6 @@ def list_backends() -> list[EngineBackend]:
 
 def list_backend_ids() -> list[str]:
     return sorted(_ENGINE_BACKENDS)
-
-
-def parse_engine_overrides(options: list[str]) -> EngineOverrides:
-    overrides: EngineOverrides = {}
-    for raw in options:
-        key, sep, value = raw.partition("=")
-        if not sep:
-            raise ConfigError(f"Invalid --engine-option {raw!r}; expected KEY=VALUE.")
-        key = key.strip()
-        if not key:
-            raise ConfigError(f"Invalid --engine-option {raw!r}; expected KEY=VALUE.")
-        overrides[key] = value
-    return overrides
 
 
 def get_engine_config(
