@@ -9,6 +9,7 @@ import typer
 from . import __version__
 from .backends import EngineBackend
 from .bridge import BridgeConfig, _run_main_loop
+from .transcribe import WhisperConfig
 from .config import ConfigError, load_telegram_config
 from .engines import get_backend, get_engine_config, list_backends
 from .logging import setup_logging
@@ -53,6 +54,13 @@ def _parse_bridge_config(
     chat_id = chat_id_value
 
     engine_cfg = get_engine_config(config, backend.id, config_path)
+
+    # Parse whisper config
+    whisper_cfg_data = config.get("whisper", {})
+    if not isinstance(whisper_cfg_data, dict):
+        whisper_cfg_data = {}
+    whisper_cfg = WhisperConfig.from_dict(whisper_cfg_data)
+
     startup_msg = (
         f"\N{OCTOPUS} **takopi is ready**\n\n"
         f"agent: `{backend.id}`  \n"
@@ -68,6 +76,7 @@ def _parse_bridge_config(
         chat_id=chat_id,
         final_notify=final_notify,
         startup_msg=startup_msg,
+        whisper=whisper_cfg,
     )
 
 

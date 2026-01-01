@@ -17,6 +17,7 @@ from .model import CompletedEvent, ResumeToken, StartedEvent, TakopiEvent
 from .render import ExecProgressRenderer, render_event_cli
 from .runner import Runner
 from .telegram import BotClient
+from .transcribe import transcribe_audio, TranscriptionError, WhisperConfig
 
 
 logger = logging.getLogger(__name__)
@@ -194,6 +195,7 @@ class BridgeConfig:
     final_notify: bool
     startup_msg: str
     progress_edit_every: float = PROGRESS_EDIT_EVERY_S
+    whisper: WhisperConfig = field(default_factory=WhisperConfig)
 
 
 @dataclass
@@ -523,7 +525,7 @@ async def poll_updates(cfg: BridgeConfig):
 
     while True:
         updates = await cfg.bot.get_updates(
-            offset=offset, timeout_s=50, allowed_updates=["message"]
+            offset=offset, timeout_s=50, allowed_updates=["message", "callback_query"]
         )
         if updates is None:
             logger.info("[loop] getUpdates failed")
@@ -533,10 +535,63 @@ async def poll_updates(cfg: BridgeConfig):
 
         for upd in updates:
             offset = upd["update_id"] + 1
-            msg = upd["message"]
-            if "text" not in msg:
+
+            # Handle callback queries (button presses)
+            if "callback_query" in upd:
+                cq = upd["callback_query"]
+                cq_id = cq.get("id")
+                cq_data = cq.get("data", "")
+                cq_from = cq.get("from", {})
+                if cq_from.get("id") == cfg.chat_id and cq_data:
+                    # Acknowledge the callback
+                    await cfg.bot.answer_callback_query(cq_id)
+                    # Treat callback data as a text message
+                    msg = cq.get("message", {})
+                    msg["text"] = cq_data
+                    msg["from"] = cq_from
+                    msg["chat"] = {"id": cfg.chat_id}
+                    msg["message_id"] = msg.get("message_id", 0)
+                    yield msg
                 continue
+
+            if "message" not in upd:
+                continue
+            msg = upd["message"]
             if not (msg["chat"]["id"] == msg["from"]["id"] == cfg.chat_id):
+                continue
+
+            # Handle voice messages
+            if "voice" in msg and cfg.whisper.enabled:
+                voice = msg["voice"]
+                file_id = voice.get("file_id")
+                if file_id:
+                    try:
+                        file_info = await cfg.bot.get_file(file_id)
+                        if file_info and "file_path" in file_info:
+                            audio_data = await cfg.bot.download_file(file_info["file_path"])
+                            if audio_data:
+                                logger.info("[voice] transcribing %d bytes", len(audio_data))
+                                text = await transcribe_audio(
+                                    audio_data,
+                                    model=cfg.whisper.model,
+                                    language=cfg.whisper.language,
+                                )
+                                if text:
+                                    msg["text"] = text
+                                    yield msg
+                                    continue
+                    except TranscriptionError as e:
+                        logger.error("[voice] transcription failed: %s", e)
+                        await cfg.bot.send_message(
+                            chat_id=cfg.chat_id,
+                            text=f"Failed to transcribe voice: {e}",
+                            reply_to_message_id=msg["message_id"],
+                        )
+                    except Exception as e:
+                        logger.exception("[voice] unexpected error: %s", e)
+                continue
+
+            if "text" not in msg:
                 continue
             yield msg
 

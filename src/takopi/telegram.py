@@ -29,6 +29,7 @@ class BotClient(Protocol):
         disable_notification: bool | None = False,
         entities: list[dict] | None = None,
         parse_mode: str | None = None,
+        reply_markup: dict | None = None,
     ) -> dict | None: ...
 
     async def edit_message_text(
@@ -41,6 +42,14 @@ class BotClient(Protocol):
     ) -> dict | None: ...
 
     async def delete_message(self, chat_id: int, message_id: int) -> bool: ...
+
+    async def get_file(self, file_id: str) -> dict | None: ...
+
+    async def download_file(self, file_path: str) -> bytes | None: ...
+
+    async def answer_callback_query(
+        self, callback_query_id: str, text: str | None = None
+    ) -> bool: ...
 
 
 class TelegramClient:
@@ -125,6 +134,7 @@ class TelegramClient:
         disable_notification: bool | None = False,
         entities: list[dict] | None = None,
         parse_mode: str | None = None,
+        reply_markup: dict | None = None,
     ) -> dict | None:
         params: dict[str, Any] = {
             "chat_id": chat_id,
@@ -138,6 +148,8 @@ class TelegramClient:
             params["entities"] = entities
         if parse_mode is not None:
             params["parse_mode"] = parse_mode
+        if reply_markup is not None:
+            params["reply_markup"] = reply_markup
         return await self._post("sendMessage", params)  # type: ignore[return-value]
 
     async def edit_message_text(
@@ -167,4 +179,28 @@ class TelegramClient:
                 "message_id": message_id,
             },
         )
+        return bool(res)
+
+    async def get_file(self, file_id: str) -> dict | None:
+        return await self._post("getFile", {"file_id": file_id})  # type: ignore[return-value]
+
+    async def download_file(self, file_path: str) -> bytes | None:
+        url = f"{self._base.replace('/bot', '/file/bot')}/{file_path}"
+        try:
+            resp = await self._client.get(url)
+            if resp.status_code == 200:
+                return resp.content
+            logger.error("[telegram] download failed status=%s", resp.status_code)
+            return None
+        except httpx.HTTPError as e:
+            logger.error("[telegram] download error: %s", e)
+            return None
+
+    async def answer_callback_query(
+        self, callback_query_id: str, text: str | None = None
+    ) -> bool:
+        params: dict[str, Any] = {"callback_query_id": callback_query_id}
+        if text is not None:
+            params["text"] = text
+        res = await self._post("answerCallbackQuery", params)
         return bool(res)
