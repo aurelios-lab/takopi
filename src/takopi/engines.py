@@ -8,6 +8,7 @@ from typing import Any, Callable
 from .config import ConfigError
 from .runner import Runner
 from .runners.codex import CodexRunner
+from .runners.claude import ClaudeRunner
 
 EngineConfig = dict[str, Any]
 
@@ -29,13 +30,15 @@ class EngineBackend:
 
 def _codex_check_setup(_config: EngineConfig, _config_path: Path) -> list[SetupIssue]:
     if shutil.which("codex") is None:
-        return [
-            SetupIssue(
-                "Install the Codex CLI",
-                ("   [dim]$[/] npm install -g @openai/codex",),
-            )
-        ]
+        return [_codex_install_issue()]
     return []
+
+
+def _codex_install_issue() -> SetupIssue:
+    return SetupIssue(
+        "Install the Codex CLI",
+        ("   [dim]$[/] npm install -g @openai/codex",),
+    )
 
 
 def _codex_build_runner(config: EngineConfig, config_path: Path) -> Runner:
@@ -77,6 +80,43 @@ def _codex_startup_message(cwd: str) -> str:
     return f"codex is ready\npwd: {cwd}"
 
 
+def _claude_check_setup(_config: EngineConfig, _config_path: Path) -> list[SetupIssue]:
+    claude_cmd = "claude"
+    if shutil.which(claude_cmd) is None:
+        return [_claude_install_issue()]
+    return []
+
+
+def _claude_install_issue() -> SetupIssue:
+    return SetupIssue(
+        "Install the Claude Code CLI",
+        ("   [dim]$[/] npm install -g @anthropic-ai/claude-code",),
+    )
+
+
+def _claude_build_runner(config: EngineConfig, _config_path: Path) -> Runner:
+    claude_cmd = "claude"
+
+    model = config.get("model")
+    allowed_tools = config.get("allowed_tools")
+    dangerously_skip_permissions = config.get("dangerously_skip_permissions") is True
+    use_api_billing = config.get("use_api_billing") is True
+    title = str(model) if model is not None else "claude"
+
+    return ClaudeRunner(
+        claude_cmd=claude_cmd,
+        model=model,
+        allowed_tools=allowed_tools,
+        dangerously_skip_permissions=dangerously_skip_permissions,
+        use_api_billing=use_api_billing,
+        session_title=title,
+    )
+
+
+def _claude_startup_message(cwd: str) -> str:
+    return f"claude is ready\npwd: {cwd}"
+
+
 _ENGINE_BACKENDS: dict[str, EngineBackend] = {
     "codex": EngineBackend(
         id="codex",
@@ -84,6 +124,13 @@ _ENGINE_BACKENDS: dict[str, EngineBackend] = {
         check_setup=_codex_check_setup,
         build_runner=_codex_build_runner,
         startup_message=_codex_startup_message,
+    ),
+    "claude": EngineBackend(
+        id="claude",
+        display_name="Claude",
+        check_setup=_claude_check_setup,
+        build_runner=_claude_build_runner,
+        startup_message=_claude_startup_message,
     ),
 }
 
@@ -96,6 +143,15 @@ def get_backend(engine_id: str) -> EngineBackend:
         raise ConfigError(
             f"Unknown engine {engine_id!r}. Available: {available}."
         ) from exc
+
+
+def get_install_issue(engine_id: str) -> SetupIssue:
+    if engine_id == "codex":
+        return _codex_install_issue()
+    if engine_id == "claude":
+        return _claude_install_issue()
+    available = ", ".join(sorted(_ENGINE_BACKENDS))
+    raise ConfigError(f"Unknown engine {engine_id!r}. Available: {available}.")
 
 
 def list_backends() -> list[EngineBackend]:

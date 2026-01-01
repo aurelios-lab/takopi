@@ -146,12 +146,7 @@ def render_setup_guide(result: SetupResult):
 
 ## Adding a Runner
 
-1. Implement the `Runner` protocol in `src/takopi/runners/<engine>.py`.
-2. Emit Takopi events from `takopi.model` and implement resume helpers
-   (`format_resume`, `extract_resume`, `is_resume_line`).
-3. Register an `EngineBackend` in `src/takopi/engines.py` with setup checks
-   and runner construction.
-4. Extend tests (runner contract + any engine-specific translation tests).
+See `docs/adding-a-runner.md` for the full guide and a worked example.
 
 ## Data Flow
 

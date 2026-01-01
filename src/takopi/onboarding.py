@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Sequence
 
 from rich.console import Console
 from rich.panel import Panel
@@ -22,7 +23,7 @@ class SetupResult:
         return not self.issues
 
 
-def _config_issue(path: Path) -> SetupIssue:
+def config_issue(path: Path) -> SetupIssue:
     config_display = _config_path_display(path)
     return SetupIssue(
         "Create a config",
@@ -51,7 +52,7 @@ def check_setup(backend: EngineBackend) -> SetupResult:
         config, config_path = load_telegram_config()
     except ConfigError:
         issues.extend(backend.check_setup({}, config_path))
-        issues.append(_config_issue(config_path))
+        issues.append(config_issue(config_path))
         return SetupResult(issues=issues, config_path=config_path)
 
     token = config.get("bot_token")
@@ -62,7 +63,7 @@ def check_setup(backend: EngineBackend) -> SetupResult:
 
     issues.extend(backend.check_setup(config, config_path))
     if missing_or_invalid_config:
-        issues.append(_config_issue(config_path))
+        issues.append(config_issue(config_path))
 
     return SetupResult(issues=issues, config_path=config_path)
 
@@ -96,8 +97,33 @@ def render_setup_guide(result: SetupResult) -> None:
 
     panel = Panel(
         "\n".join(parts).rstrip(),
-        title="[bold]Welcome to takopi![/]",
+        title="[bold]welcome to takopi![/]",
         subtitle=f"{_OCTOPUS} setup required",
+        border_style="yellow",
+        padding=(1, 2),
+        expand=False,
+    )
+    console.print(panel)
+
+
+def render_engine_choice(backends: Sequence[EngineBackend]) -> None:
+    console = Console(stderr=True)
+    parts: list[str] = []
+    parts.append("[bold]available engines:[/]")
+    parts.append("")
+    for idx, backend in enumerate(backends, start=1):
+        parts.append(f"[bold yellow]{idx}.[/] [dim]$[/] takopi {backend.id}")
+        if backend.id == "claude":
+            description = "use claude code"
+        else:
+            description = f"use {backend.display_name.lower()}"
+        parts.append(f"   [dim]{description}[/]")
+        parts.append("")
+
+    panel = Panel(
+        "\n".join(parts).rstrip(),
+        title="[bold]welcome to takopi![/]",
+        subtitle=f"{_OCTOPUS} choose engine",
         border_style="yellow",
         padding=(1, 2),
         expand=False,

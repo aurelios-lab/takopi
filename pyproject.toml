@@ -1,7 +1,7 @@
 [project]
 name = "takopi"
 authors = [{name = "banteg"}]
-version = "0.2.0"
+version = "0.3.0.dev0"
 description = "Run OpenAI Codex CLI with Telegram as the human-in-the-loop interface."
 readme = "readme.md"
 license = { file = "LICENSE" }
@@ -29,6 +29,7 @@ Issues = "https://github.com/banteg/takopi/issues"
 
 [project.scripts]
 takopi = "takopi.cli:main"
+takopi-debug-onboarding = "takopi.debug_onboarding:main"
 
 [build-system]
 requires = ["uv_build>=0.9.18,<0.10.0"]
@@ -44,5 +45,5 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-addopts = ["--cov=takopi", "--cov-report=term-missing"]
+addopts = ["--cov=takopi", "--cov-report=term-missing", "--cov-fail-under=70"]
 testpaths = ["tests"]

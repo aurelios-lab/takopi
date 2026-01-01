@@ -108,6 +108,7 @@ The normalized event model MUST NOT live under `runners/` because it is core dom
 The canonical representation of “resume” embedded in chat is the runner’s **engine CLI resume command**, e.g.:
 
 - Codex: ``codex resume <uuid>``
+- Claude Code: ``claude --resume <uuid>``
 
 Takopi MUST treat the runner as the authority for:
 
@@ -290,6 +291,9 @@ Codex emits `thread.started` (with `thread_id`) before any `turn.*` / `item.*` e
 
 Codex also emits exactly one `agent_message`/`assistant_message` per turn; the runner uses that message text as `completed.answer`.
 
+**Claude Code note (non-normative):**
+Claude Code emits `system.init` (with `session_id`) before any `assistant`/`user` message objects; the runner should emit `started` on `system.init`. Claude’s final `result` message carries the session id and final answer (`result.result`), which the runner uses as `completed.answer`.
+
 ### 6.3 Run completion event (MUST)
 
 ```python
@@ -436,7 +440,8 @@ Final output MUST include:
 
 ### 9.1 v0.2.0 behavior (Decision #5)
 
-- A single runner/engine is selected at startup via config/CLI (default: Codex).
+- A single runner/engine is selected at startup via CLI subcommand (no default).
+- If no engine subcommand is provided, Takopi prints the engine chooser panel and exits.
 - Resume extraction uses only the selected runner’s parser.
 - If the user attempts to resume a thread created by a different engine, resume extraction will fail and the bot treats it as a new thread.
 
@@ -445,7 +450,7 @@ Final output MUST include:
 Takopi MAY support:
 
 - trying all registered runners’ `extract_resume` to auto-select a runner for resumes
-- falling back to default runner when no resume is present
+- selecting a preferred engine from config when no resume is present
 
 The architecture SHOULD keep this future change localized to a `RunnerRegistry` / router.
 

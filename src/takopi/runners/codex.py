@@ -1,20 +1,14 @@
 from __future__ import annotations
 
-import json
 import logging
-import os
-import signal
 import subprocess
 from collections import deque
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, cast
 from weakref import WeakValueDictionary
 
 import anyio
-from anyio.abc import ByteReceiveStream, Process
-from anyio.streams.text import TextReceiveStream
 from ..model import (
     Action,
     ActionEvent,
@@ -27,7 +21,15 @@ from ..model import (
     StartedEvent,
     TakopiEvent,
 )
-from ..runner import ResumeRunnerMixin, Runner, compile_resume_pattern
+from ..runner import (
+    ResumeTokenMixin,
+    Runner,
+    SessionLockMixin,
+    compile_resume_pattern,
+)
+from ..utils.paths import relativize_command
+from ..utils.streams import drain_stderr, iter_jsonl
+from ..utils.subprocess import manage_subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +232,7 @@ def _translate_item_event(etype: str, item: dict[str, Any]) -> list[TakopiEvent]
         return []
 
     if kind == "command":
-        title = str(item.get("command") or "")
+        title = relativize_command(str(item.get("command") or ""))
         if phase in {"started", "updated"}:
             return [
                 _action_event(
@@ -406,94 +408,7 @@ def translate_codex_event(event: dict[str, Any], *, title: str) -> list[TakopiEv
     return []
 
 
-async def _iter_text_lines(stream: ByteReceiveStream):
-    text_stream = TextReceiveStream(stream, errors="replace")
-    buffer = ""
-    while True:
-        try:
-            chunk = await text_stream.receive()
-        except anyio.EndOfStream:
-            if buffer:
-                yield buffer
-            return
-        buffer += chunk
-        while True:
-            split_at = buffer.find("\n")
-            if split_at < 0:
-                break
-            line = buffer[: split_at + 1]
-            buffer = buffer[split_at + 1 :]
-            yield line
-
-
-async def _drain_stderr(stderr: ByteReceiveStream, chunks: deque[str]) -> None:
-    try:
-        async for line in _iter_text_lines(stderr):
-            logger.debug("[codex][stderr] %s", line.rstrip())
-            chunks.append(line)
-    except Exception as e:
-        logger.debug("[codex][stderr] drain error: %s", e)
-
-
-async def _wait_for_process(proc: Process, timeout: float) -> bool:
-    with anyio.move_on_after(timeout) as scope:
-        await proc.wait()
-    return scope.cancel_called
-
-
-def _terminate_process(proc: Process) -> None:
-    if proc.returncode is not None:
-        return
-    if os.name == "posix" and proc.pid is not None:
-        try:
-            os.killpg(proc.pid, signal.SIGTERM)
-            return
-        except ProcessLookupError:
-            return
-        except Exception as e:
-            logger.debug("[codex] failed to terminate process group: %s", e)
-    try:
-        proc.terminate()
-    except ProcessLookupError:
-        return
-
-
-def _kill_process(proc: Process) -> None:
-    if proc.returncode is not None:
-        return
-    if os.name == "posix" and proc.pid is not None:
-        try:
-            os.killpg(proc.pid, signal.SIGKILL)
-            return
-        except ProcessLookupError:
-            return
-        except Exception as e:
-            logger.debug("[codex] failed to kill process group: %s", e)
-    try:
-        proc.kill()
-    except ProcessLookupError:
-        return
-
-
-@asynccontextmanager
-async def manage_subprocess(*args, **kwargs):
-    """Ensure subprocesses receive SIGTERM, then SIGKILL after a 2s timeout."""
-    if os.name == "posix":
-        kwargs.setdefault("start_new_session", True)
-    proc = await anyio.open_process(args, **kwargs)
-    try:
-        yield proc
-    finally:
-        if proc.returncode is None:
-            with anyio.CancelScope(shield=True):
-                _terminate_process(proc)
-                timed_out = await _wait_for_process(proc, timeout=2.0)
-                if timed_out:
-                    _kill_process(proc)
-                    await proc.wait()
-
-
-class CodexRunner(ResumeRunnerMixin, Runner):
+class CodexRunner(SessionLockMixin, ResumeTokenMixin, Runner):
     engine: EngineId = ENGINE
     resume_re = _RESUME_RE
 
@@ -511,30 +426,11 @@ class CodexRunner(ResumeRunnerMixin, Runner):
             WeakValueDictionary()
         )
 
-    def _lock_for(self, token: ResumeToken) -> anyio.Lock:
-        key = f"{token.engine}:{token.value}"
-        lock = self._session_locks.get(key)
-        if lock is None:
-            lock = anyio.Lock()
-            self._session_locks[key] = lock
-        return lock
-
     async def run(
         self, prompt: str, resume: ResumeToken | None
     ) -> AsyncIterator[TakopiEvent]:
-        resume_token = resume
-        if resume_token is not None and resume_token.engine != ENGINE:
-            raise RuntimeError(
-                f"resume token is for engine {resume_token.engine!r}, not {ENGINE!r}"
-            )
-        if resume_token is None:
-            async for evt in self._run(prompt, resume_token):
-                yield evt
-            return
-        lock = self._lock_for(resume_token)
-        async with lock:
-            async for evt in self._run(prompt, resume_token):
-                yield evt
+        async for evt in self._run_with_resume_lock(prompt, resume, self._run):
+            yield evt
 
     async def _run(  # noqa: C901
         self,
@@ -586,30 +482,31 @@ class CodexRunner(ResumeRunnerMixin, Runner):
                     return f"codex.note.{note_seq}"
 
                 async with anyio.create_task_group() as tg:
-                    tg.start_soon(_drain_stderr, proc_stderr, stderr_chunks)
+                    tg.start_soon(
+                        drain_stderr,
+                        proc_stderr,
+                        stderr_chunks,
+                        logger,
+                        "codex",
+                    )
                     await proc_stdin.send(prompt.encode())
                     await proc_stdin.aclose()
 
-                    async for raw_line in _iter_text_lines(proc_stdout):
-                        raw = raw_line.rstrip("\n")
-                        logger.debug("[codex][jsonl] %s", raw)
-                        line = raw.strip()
-                        if not line:
-                            continue
+                    async for json_line in iter_jsonl(
+                        proc_stdout, logger=logger, tag="codex"
+                    ):
                         if did_emit_completed:
                             continue
-                        try:
-                            evt = json.loads(line)
-                        except json.JSONDecodeError:
-                            logger.debug("[codex] invalid json line: %s", line)
+                        if json_line.data is None:
                             note = _note_completed(
                                 next_note_id(),
                                 "invalid JSON from codex; ignoring line",
                                 ok=False,
-                                detail={"line": line},
+                                detail={"line": json_line.line},
                             )
                             yield note
                             continue
+                        evt = json_line.data
 
                         etype = evt.get("type")
                         if etype == "error":
