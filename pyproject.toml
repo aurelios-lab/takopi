@@ -5,7 +5,7 @@ version = "0.4.0.dev0"
 description = "Run OpenAI Codex CLI with Telegram as the human-in-the-loop interface."
 readme = "readme.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 dependencies = [
   "anyio>=4.12.0",
   "httpx>=0.28.1",
