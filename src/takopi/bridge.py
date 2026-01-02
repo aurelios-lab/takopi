@@ -12,6 +12,7 @@ from typing import Any
 
 import anyio
 
+from .buttons import ButtonsConfig, build_inline_keyboard
 from .markdown import TELEGRAM_MARKDOWN_LIMIT, prepare_telegram
 from .model import CompletedEvent, ResumeToken, StartedEvent, TakopiEvent
 from .render import ExecProgressRenderer, render_event_cli
@@ -196,6 +197,7 @@ class BridgeConfig:
     startup_msg: str
     progress_edit_every: float = PROGRESS_EDIT_EVERY_S
     whisper: WhisperConfig = field(default_factory=WhisperConfig)
+    buttons: ButtonsConfig = field(default_factory=ButtonsConfig)
 
 
 @dataclass
@@ -208,11 +210,21 @@ class RunningTask:
 
 async def _send_startup(cfg: BridgeConfig) -> None:
     logger.debug("[startup] message: %s", cfg.startup_msg)
-    sent, _ = await _send_or_edit_markdown(
-        cfg.bot,
+
+    # Build startup buttons if configured
+    reply_markup = None
+    if cfg.buttons.startup:
+        reply_markup = build_inline_keyboard(cfg.buttons.startup)
+        logger.debug("[startup] buttons: %s", reply_markup)
+
+    rendered, entities = prepare_telegram(
+        cfg.startup_msg, limit=TELEGRAM_MARKDOWN_LIMIT
+    )
+    sent = await cfg.bot.send_message(
         chat_id=cfg.chat_id,
-        text=cfg.startup_msg,
-        limit=TELEGRAM_MARKDOWN_LIMIT,
+        text=rendered,
+        entities=entities,
+        reply_markup=reply_markup,
     )
     if sent is not None:
         logger.info("[startup] sent startup message to chat_id=%s", cfg.chat_id)
@@ -523,6 +535,10 @@ async def poll_updates(cfg: BridgeConfig):
     offset = await _drain_backlog(cfg, offset)
     await _send_startup(cfg)
 
+    # Track pending voice transcripts waiting for button confirmation
+    # Key: confirmation message_id, Value: (transcript, original_msg)
+    pending_voice: dict[int, tuple[str, dict[str, Any]]] = {}
+
     while True:
         updates = await cfg.bot.get_updates(
             offset=offset, timeout_s=50, allowed_updates=["message", "callback_query"]
@@ -545,13 +561,32 @@ async def poll_updates(cfg: BridgeConfig):
                 if cq_from.get("id") == cfg.chat_id and cq_data:
                     # Acknowledge the callback
                     await cfg.bot.answer_callback_query(cq_id)
-                    # Treat callback data as a text message
-                    msg = cq.get("message", {})
-                    msg["text"] = cq_data
-                    msg["from"] = cq_from
-                    msg["chat"] = {"id": cfg.chat_id}
-                    msg["message_id"] = msg.get("message_id", 0)
-                    yield msg
+
+                    cq_msg = cq.get("message", {})
+                    cq_msg_id = cq_msg.get("message_id", 0)
+
+                    # Check if this is a voice confirmation button
+                    if cq_msg_id in pending_voice:
+                        transcript, original_msg = pending_voice.pop(cq_msg_id)
+                        logger.info(
+                            "[voice] button pressed: %s for transcript: %s",
+                            cq_data, transcript[:50]
+                        )
+                        # Delete the confirmation message
+                        await cfg.bot.delete_message(
+                            chat_id=cfg.chat_id, message_id=cq_msg_id
+                        )
+                        # Combine button action with transcript
+                        original_msg["text"] = f"{cq_data}\n\n{transcript}"
+                        yield original_msg
+                        continue
+
+                    # Regular button press - treat callback data as text message
+                    cq_msg["text"] = cq_data
+                    cq_msg["from"] = cq_from
+                    cq_msg["chat"] = {"id": cfg.chat_id}
+                    cq_msg["message_id"] = cq_msg_id
+                    yield cq_msg
                 continue
 
             if "message" not in upd:
@@ -577,9 +612,37 @@ async def poll_updates(cfg: BridgeConfig):
                                     language=cfg.whisper.language,
                                 )
                                 if text:
-                                    msg["text"] = text
-                                    yield msg
-                                    continue
+                                    # Check if voice buttons are enabled
+                                    voice_cfg = cfg.buttons.voice
+                                    if voice_cfg.enabled and voice_cfg.options:
+                                        # Send confirmation with buttons
+                                        preview = text[:100] + "..." if len(text) > 100 else text
+                                        confirm_text = f"🎤 **Voice transcribed:**\n\n_{preview}_"
+                                        reply_markup = build_inline_keyboard(voice_cfg.options)
+
+                                        rendered, entities = prepare_telegram(
+                                            confirm_text, limit=TELEGRAM_MARKDOWN_LIMIT
+                                        )
+                                        confirm_msg = await cfg.bot.send_message(
+                                            chat_id=cfg.chat_id,
+                                            text=rendered,
+                                            entities=entities,
+                                            reply_to_message_id=msg["message_id"],
+                                            reply_markup=reply_markup,
+                                        )
+                                        if confirm_msg:
+                                            confirm_id = int(confirm_msg["message_id"])
+                                            pending_voice[confirm_id] = (text, msg)
+                                            logger.info(
+                                                "[voice] awaiting button confirmation msg_id=%s",
+                                                confirm_id
+                                            )
+                                        continue
+                                    else:
+                                        # No voice buttons, process immediately
+                                        msg["text"] = text
+                                        yield msg
+                                        continue
                     except TranscriptionError as e:
                         logger.error("[voice] transcription failed: %s", e)
                         await cfg.bot.send_message(

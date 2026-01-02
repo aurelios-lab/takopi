@@ -15,6 +15,7 @@ Evolve takopi into a customizable Telegram-to-Claude bridge with project-specifi
 - [x] Environment variable support for secrets (`TAKOPI_BOT_TOKEN`, `TAKOPI_CHAT_ID`)
 - [x] Local config override (project-specific `takopi.toml` merges with global config)
 - [x] Claude `system_prompt` config option (`--append-system-prompt` flag)
+- [x] Button configuration (`[buttons]` config) - startup + voice confirmation buttons
 
 Merged to `master`
 
@@ -119,9 +120,10 @@ No timeout - wait for user decision.
 ```
 src/takopi/
 ├── telegram.py      # +get_file, +download_file, +answer_callback_query, +reply_markup
-├── bridge.py        # +voice handling, +callback_query handling, +WhisperConfig
+├── bridge.py        # +voice handling, +callback_query handling, +WhisperConfig, +ButtonsConfig
 ├── transcribe.py    # NEW - Whisper transcription
-├── cli.py           # +whisper config parsing
+├── buttons.py       # NEW - Button configuration (startup, voice confirmation)
+├── cli.py           # +whisper config parsing, +buttons config parsing
 ├── hooks.py         # TODO - Hook system
 └── context.py       # TODO - Context injection
 ```
@@ -130,11 +132,9 @@ src/takopi/
 
 1. [ ] Implement context file injection (`[context]` config)
 2. [ ] Implement hook system (`[hooks]` config)
-3. [ ] Implement button configuration (`[buttons]` config)
-4. [ ] Add queue management for rapid-fire messages
-5. [ ] Voice confirmation flow with buttons
-6. [ ] Create example hooks for Tiro (tiro_hooks.py)
-7. [ ] Documentation and examples
+3. [ ] Add queue management for rapid-fire messages
+4. [ ] Create example hooks for Tiro (tiro_hooks.py)
+5. [ ] Documentation and examples
 
 ## Testing
 
