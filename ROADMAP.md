@@ -4,15 +4,17 @@
 
 Evolve takopi into a customizable Telegram-to-Claude bridge with project-specific hooks.
 
-## Completed (2026-01-01)
+## Completed (2026-01-02)
 
 - [x] Voice transcription via local Whisper
 - [x] Inline button support (reply_markup)
 - [x] Callback query handling
 - [x] Config: `[whisper]` section
 - [x] Python version fix (>=3.10)
+- [x] Whisper binary discovery for venv installations
+- [x] Environment variable support for secrets (`TAKOPI_BOT_TOKEN`, `TAKOPI_CHAT_ID`)
 
-Branch: `feature/voice-and-buttons`
+Merged to `master`
 
 ## Planned Architecture
 
@@ -149,4 +151,11 @@ tiro-tg stop
 
 ## Config Location
 
-`~/.takopi/takopi.toml`
+- `~/.takopi/takopi.toml` - main config (non-sensitive)
+- `~/.secrets/takopi.env` - secrets (recommended, never read by Claude Code)
+
+Or use environment variables directly:
+```bash
+export TAKOPI_BOT_TOKEN='your-token'
+export TAKOPI_CHAT_ID='your-chat-id'
+```
