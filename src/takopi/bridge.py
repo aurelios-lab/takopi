@@ -8,6 +8,8 @@ import inspect
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import anyio
@@ -530,6 +532,52 @@ async def handle_message(
         await cfg.bot.delete_message(chat_id=chat_id, message_id=progress_id)
 
 
+async def _store_transcript(
+    bot: BotClient,
+    chat_id: int,
+    store_path: str,
+    transcript: str,
+    reply_to: int | None = None,
+) -> None:
+    """Store a voice transcript to a file and send confirmation."""
+    try:
+        path = Path(store_path)
+        # Create file if it doesn't exist
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+
+        # Format entry with timestamp
+        now = datetime.now()
+        timestamp = now.strftime("%Y-%m-%d %H:%M")
+        entry = f"\n## {timestamp}\n\n{transcript}\n"
+
+        # Append to file
+        with path.open("a", encoding="utf-8") as f:
+            f.write(entry)
+
+        logger.info("[store] appended to %s", store_path)
+
+        # Send confirmation
+        preview = transcript[:50] + "..." if len(transcript) > 50 else transcript
+        confirm_text = f"✓ Stored: _{preview}_"
+        rendered, entities = prepare_telegram(confirm_text, limit=TELEGRAM_MARKDOWN_LIMIT)
+        await bot.send_message(
+            chat_id=chat_id,
+            text=rendered,
+            entities=entities,
+            reply_to_message_id=reply_to,
+        )
+
+    except Exception as e:
+        logger.error("[store] failed to write to %s: %s", store_path, e)
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"Failed to store: {e}",
+            reply_to_message_id=reply_to,
+        )
+
+
 async def poll_updates(cfg: BridgeConfig):
     offset: int | None = None
     offset = await _drain_backlog(cfg, offset)
@@ -567,18 +615,83 @@ async def poll_updates(cfg: BridgeConfig):
 
                     # Check if this is a voice confirmation button
                     if cq_msg_id in pending_voice:
-                        transcript, original_msg = pending_voice.pop(cq_msg_id)
+                        transcript, original_msg = pending_voice[cq_msg_id]
                         logger.info(
                             "[voice] button pressed: %s for transcript: %s",
                             cq_data, transcript[:50]
                         )
-                        # Delete the confirmation message
-                        await cfg.bot.delete_message(
-                            chat_id=cfg.chat_id, message_id=cq_msg_id
-                        )
-                        # Combine button action with transcript
-                        original_msg["text"] = f"{cq_data}\n\n{transcript}"
-                        yield original_msg
+
+                        # Handle different voice actions
+                        if cq_data == "!process":
+                            # Process: send to Claude with context hint
+                            pending_voice.pop(cq_msg_id)
+                            await cfg.bot.delete_message(
+                                chat_id=cfg.chat_id, message_id=cq_msg_id
+                            )
+                            original_msg["text"] = f"[Voice message]\n{transcript}"
+                            yield original_msg
+
+                        elif cq_data == "!store":
+                            # Store: write to file, don't send to Claude
+                            pending_voice.pop(cq_msg_id)
+                            await cfg.bot.delete_message(
+                                chat_id=cfg.chat_id, message_id=cq_msg_id
+                            )
+                            store_path = cfg.buttons.voice.store_file
+                            await _store_transcript(
+                                cfg.bot, cfg.chat_id, store_path, transcript,
+                                reply_to=original_msg["message_id"]
+                            )
+                            # Don't yield - this doesn't go to Claude
+
+                        elif cq_data == "!review":
+                            # Review: show full transcript, then show action buttons
+                            voice_cfg = cfg.buttons.voice
+                            # Filter out Review button for the follow-up
+                            review_options = tuple(
+                                btn for btn in voice_cfg.options if btn.data != "!review"
+                            )
+                            reply_markup = build_inline_keyboard(review_options)
+
+                            # Edit original message to show full transcript (no buttons)
+                            review_text = f"🎤 **Full transcript:**\n\n{transcript}"
+                            rendered, entities = prepare_telegram(
+                                review_text, limit=TELEGRAM_MARKDOWN_LIMIT
+                            )
+                            await cfg.bot.edit_message_text(
+                                chat_id=cfg.chat_id,
+                                message_id=cq_msg_id,
+                                text=rendered,
+                                entities=entities,
+                            )
+
+                            # Remove old message from pending
+                            pending_voice.pop(cq_msg_id)
+
+                            # Send new message with action buttons
+                            new_msg = await cfg.bot.send_message(
+                                chat_id=cfg.chat_id,
+                                text="What would you like to do?",
+                                reply_markup=reply_markup,
+                            )
+                            # Track new message for button presses
+                            if new_msg:
+                                new_msg_id = int(new_msg["message_id"])
+                                pending_voice[new_msg_id] = (transcript, original_msg)
+                                logger.info(
+                                    "[voice] review shown, new buttons msg_id=%s",
+                                    new_msg_id
+                                )
+
+                        else:
+                            # Unknown action, treat as generic button
+                            pending_voice.pop(cq_msg_id)
+                            await cfg.bot.delete_message(
+                                chat_id=cfg.chat_id, message_id=cq_msg_id
+                            )
+                            original_msg["text"] = f"{cq_data}\n\n{transcript}"
+                            yield original_msg
+
                         continue
 
                     # Regular button press - treat callback data as text message

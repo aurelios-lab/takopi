@@ -41,7 +41,7 @@ cwd = "~/prod/tiro"
 - Inject project files into Claude's context
 - Set working directory for Claude subprocess
 
-#### 2. Button Configuration
+#### 2. Button Configuration ✅ IMPLEMENTED
 ```toml
 [buttons]
 startup = [
@@ -52,11 +52,18 @@ startup = [
 
 [buttons.voice]
 enabled = true
+store_file = "inbox.md"  # Where !store appends transcripts
 options = [
     {text = "🔄 Process", data = "!process"},
     {text = "📥 Store", data = "!store"},
+    {text = "🔍 Review", data = "!review"},
 ]
 ```
+
+**Voice button actions:**
+- `!process` → sends `[Voice message]\n<transcript>` to Claude
+- `!store` → appends timestamped entry to `store_file`, confirms, bypasses Claude
+- `!review` → shows full transcript, then Process/Store buttons
 
 #### 3. Hook System
 ```toml
@@ -83,13 +90,14 @@ async def on_startup(ctx: dict) -> str | None:
 - Messages queue in order (no lost rapid-fire captures)
 - Failures notify user, don't silently drop
 
-#### 5. Voice Confirmation Flow
-After transcription, show configurable buttons:
+#### 5. Voice Confirmation Flow ✅ IMPLEMENTED
+After transcription, shows preview + buttons:
 ```
-"Got it. I heard: [transcript preview]"
+🎤 Voice transcribed:
+_[first 100 chars of transcript]..._
 [🔄 Process] [📥 Store] [🔍 Review]
 ```
-No timeout - wait for user decision.
+No timeout - waits for user decision.
 
 ### Tiro-Specific (lives in config, not takopi code)
 

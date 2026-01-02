@@ -22,6 +22,7 @@ class VoiceButtonsConfig:
     """Configuration for voice message buttons."""
     enabled: bool = False
     options: tuple[Button, ...] = ()
+    store_file: str = "inbox.md"  # File to append transcripts when Store is pressed
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,7 @@ class ButtonsConfig:
         voice_config = VoiceButtonsConfig()
         if isinstance(voice_data, dict):
             enabled = voice_data.get("enabled", False)
+            store_file = voice_data.get("store_file", "inbox.md")
             options_data = voice_data.get("options", [])
             voice_options: list[Button] = []
             if isinstance(options_data, list):
@@ -64,6 +66,7 @@ class ButtonsConfig:
             voice_config = VoiceButtonsConfig(
                 enabled=bool(enabled),
                 options=tuple(voice_options),
+                store_file=str(store_file),
             )
 
         return ButtonsConfig(
@@ -72,7 +75,7 @@ class ButtonsConfig:
         )
 
 
-def build_inline_keyboard(buttons: tuple[Button, ...], columns: int = 2) -> dict[str, Any]:
+def build_inline_keyboard(buttons: tuple[Button, ...], columns: int = 3) -> dict[str, Any]:
     """Build a Telegram InlineKeyboardMarkup from buttons.
 
     Args:
