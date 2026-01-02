@@ -81,14 +81,16 @@ model = "claude-sonnet-4-5-20250929" # optional (Claude Code supports model over
 allowed_tools = "Bash,Read,Edit"     # optional but strongly recommended for automation
 dangerously_skip_permissions = false # optional (high risk; prefer sandbox use only)
 use_api_billing = false             # optional (keep ANTHROPIC_API_KEY for API billing)
+system_prompt = "..."               # optional (appended via --append-system-prompt)
 ```
 
 Notes:
 
 * `--allowedTools` exists specifically to auto-approve tools in programmatic runs. ([Claude Code][1])
 * Claude Code tools (Bash/Edit/Write/WebSearch/etc.) and whether permission is required are documented. ([Claude Code][2])
-* Takopi only reads `model`, `allowed_tools`, `dangerously_skip_permissions`, and `use_api_billing` from `[claude]`.
+* Takopi reads `model`, `allowed_tools`, `dangerously_skip_permissions`, `use_api_billing`, and `system_prompt` from `[claude]`.
 * By default Takopi strips `ANTHROPIC_API_KEY` from the subprocess environment so Claude uses subscription billing. Set `use_api_billing = true` to keep the key.
+* `system_prompt` is passed to Claude via `--append-system-prompt` flag, useful for project-specific personas or behaviors.
 
 ---
 

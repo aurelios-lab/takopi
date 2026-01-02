@@ -9,6 +9,7 @@ ENV_BOT_TOKEN = "TAKOPI_BOT_TOKEN"
 ENV_CHAT_ID = "TAKOPI_CHAT_ID"
 
 LOCAL_CONFIG_NAME = Path(".takopi") / "takopi.toml"
+LOCAL_CONFIG_SIMPLE = Path("takopi.toml")  # Also support takopi.toml in cwd
 HOME_CONFIG_PATH = Path.home() / ".takopi" / "takopi.toml"
 LEGACY_LOCAL_CONFIG_NAME = Path(".codex") / "takopi.toml"
 LEGACY_HOME_CONFIG_PATH = Path.home() / ".codex" / "takopi.toml"
@@ -16,6 +17,37 @@ LEGACY_HOME_CONFIG_PATH = Path.home() / ".codex" / "takopi.toml"
 
 class ConfigError(RuntimeError):
     pass
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Deep merge override into base. Override values take precedence."""
+    result = base.copy()
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def _local_config_candidates() -> list[Path]:
+    """Return local config candidates (cwd-based), in priority order."""
+    cwd = Path.cwd()
+    return [
+        cwd / LOCAL_CONFIG_SIMPLE,      # ./takopi.toml
+        cwd / LOCAL_CONFIG_NAME,         # ./.takopi/takopi.toml
+    ]
+
+
+def _try_read_config(cfg_path: Path) -> dict | None:
+    """Try to read config, return None if not found."""
+    if not cfg_path.is_file():
+        return None
+    try:
+        raw = cfg_path.read_text(encoding="utf-8")
+        return tomllib.loads(raw)
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
 
 
 def _config_candidates() -> list[Path]:
@@ -69,22 +101,34 @@ def load_telegram_config(path: str | Path | None = None) -> tuple[dict, Path]:
         cfg_path = Path(path).expanduser()
         return _read_config(cfg_path), cfg_path
 
+    # Migrate legacy configs if needed
     for legacy, target in zip(_legacy_candidates(), _config_candidates(), strict=True):
         _maybe_migrate_legacy(legacy, target)
 
-    candidates = _config_candidates()
-    for candidate in candidates:
-        if candidate.is_file():
-            return _read_config(candidate), candidate
+    # Load global config (required)
+    global_config: dict | None = None
+    global_path: Path | None = None
 
-    legacy_candidates = _legacy_candidates()
-    for candidate in legacy_candidates:
-        if candidate.is_file():
-            return _read_config(candidate), candidate
+    if HOME_CONFIG_PATH.is_file():
+        global_config = _try_read_config(HOME_CONFIG_PATH)
+        global_path = HOME_CONFIG_PATH
+    elif LEGACY_HOME_CONFIG_PATH.is_file():
+        global_config = _try_read_config(LEGACY_HOME_CONFIG_PATH)
+        global_path = LEGACY_HOME_CONFIG_PATH
 
-    if len(candidates) == 1:
-        raise ConfigError("Missing takopi config.")
-    raise ConfigError("Missing takopi config.")
+    if global_config is None:
+        raise ConfigError("Missing takopi config at ~/.takopi/takopi.toml")
+
+    # Check for local config override (optional)
+    for local_candidate in _local_config_candidates():
+        local_config = _try_read_config(local_candidate)
+        if local_config is not None:
+            # Merge: local overrides global
+            merged = _deep_merge(global_config, local_config)
+            return merged, local_candidate
+
+    # No local config, use global only
+    return global_config, global_path
 
 
 def get_bot_token(config: dict, config_path: Path) -> str:

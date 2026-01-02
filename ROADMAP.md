@@ -13,6 +13,8 @@ Evolve takopi into a customizable Telegram-to-Claude bridge with project-specifi
 - [x] Python version fix (>=3.10)
 - [x] Whisper binary discovery for venv installations
 - [x] Environment variable support for secrets (`TAKOPI_BOT_TOKEN`, `TAKOPI_CHAT_ID`)
+- [x] Local config override (project-specific `takopi.toml` merges with global config)
+- [x] Claude `system_prompt` config option (`--append-system-prompt` flag)
 
 Merged to `master`
 
@@ -151,11 +153,28 @@ tiro-tg stop
 
 ## Config Location
 
+**Global config (required):**
 - `~/.takopi/takopi.toml` - main config (non-sensitive)
-- `~/.secrets/takopi.env` - secrets (recommended, never read by Claude Code)
 
-Or use environment variables directly:
+**Project-specific config (optional):**
+- `./takopi.toml` or `./.takopi/takopi.toml` in project directory
+- Merges with global config (local values override)
+
+**Secrets:**
+- `~/.secrets/takopi.env` - secrets file (recommended, never read by Claude Code)
+- Or use environment variables directly:
 ```bash
 export TAKOPI_BOT_TOKEN='your-token'
 export TAKOPI_CHAT_ID='your-chat-id'
+```
+
+**Project config template:**
+```toml
+# my-project/takopi.toml
+
+[claude]
+system_prompt = """
+You are a specialized assistant for this project.
+Read state.json before responding.
+"""
 ```

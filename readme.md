@@ -37,22 +37,59 @@ parallel runs across threads, per thread queue support.
 
 ## config
 
-global config `~/.takopi/takopi.toml`, repo-level config `.takopi/takopi.toml`
+### config locations
+
+takopi uses a **global + local override** config system:
+
+1. **global config** (required): `~/.takopi/takopi.toml`
+2. **local config** (optional): `./takopi.toml` or `./.takopi/takopi.toml` in cwd
+
+local config values are **deep-merged** into global config, with local taking precedence.
+
+### global config example
+
+`~/.takopi/takopi.toml` - shared settings for all projects:
 
 ```toml
 bot_token = "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
 chat_id = 123456789
 
 [codex]
-# optional: profile from ~/.codex/config.toml
 profile = "takopi"
 
 [claude]
 model = "sonnet"
-allowed_tools = ["Bash", "Read", "Write", "WebSearch"]
-dangerously_skip_permissions = false
-# uses subscription by default, override to use api billing
-use_api_billing = false
+dangerously_skip_permissions = true
+```
+
+### project-specific config
+
+create `takopi.toml` in your project directory to override global settings:
+
+```toml
+# my-project/takopi.toml
+
+[claude]
+# custom system prompt for this project
+system_prompt = """
+You are a specialized assistant for this project.
+Always read config.json before responding.
+Be concise and direct.
+"""
+
+# can also override other settings
+model = "opus"
+```
+
+### all claude options
+
+```toml
+[claude]
+model = "sonnet"                        # claude model to use
+allowed_tools = ["Bash", "Read", "Write", "WebSearch"]  # auto-approve these tools
+dangerously_skip_permissions = false    # skip all permission prompts (use with caution)
+use_api_billing = false                 # use API key billing instead of subscription
+system_prompt = "..."                   # appended to claude's system prompt (--append-system-prompt)
 ```
 
 ## usage
