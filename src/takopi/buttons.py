@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -101,3 +102,46 @@ def build_inline_keyboard(buttons: tuple[Button, ...], columns: int = 3) -> dict
         keyboard.append(row)
 
     return {"inline_keyboard": keyboard}
+
+
+def parse_response_buttons(text: str) -> tuple[str, tuple[Button, ...]]:
+    """Parse [buttons] block from Claude's response.
+
+    Format:
+    ```
+    [buttons]
+    - ✅ Done | !done
+    - ⏰ Snooze | !snooze:1h
+    ```
+
+    Args:
+        text: Claude's response text
+
+    Returns:
+        Tuple of (cleaned_text, buttons)
+        cleaned_text has the [buttons] block removed
+    """
+    # Pattern to match [buttons] block (case-insensitive, handles whitespace)
+    pattern = r'\n*\[buttons?\]\s*\n((?:[-•]\s*.+\n?)+)'
+
+    match = re.search(pattern, text, re.IGNORECASE)
+    if not match:
+        return text, ()
+
+    buttons_block = match.group(1)
+    buttons: list[Button] = []
+
+    # Parse each button line: "- Text | action" or "• Text | action"
+    line_pattern = r'[-•]\s*(.+?)\s*\|\s*(\S+)'
+    for line_match in re.finditer(line_pattern, buttons_block):
+        btn_text = line_match.group(1).strip()
+        btn_data = line_match.group(2).strip()
+        # Telegram callback_data limit is 64 bytes
+        if len(btn_data.encode('utf-8')) <= 64:
+            buttons.append(Button(text=btn_text, data=btn_data))
+
+    # Remove the [buttons] block from text
+    cleaned_text = text[:match.start()] + text[match.end():]
+    cleaned_text = cleaned_text.strip()
+
+    return cleaned_text, tuple(buttons)

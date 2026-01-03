@@ -14,7 +14,7 @@ from typing import Any
 
 import anyio
 
-from .buttons import ButtonsConfig, build_inline_keyboard
+from .buttons import ButtonsConfig, build_inline_keyboard, parse_response_buttons
 from .markdown import TELEGRAM_MARKDOWN_LIMIT, prepare_telegram
 from .model import CompletedEvent, ResumeToken, StartedEvent, TakopiEvent
 from .render import ExecProgressRenderer, render_event_cli
@@ -80,6 +80,7 @@ async def _send_or_edit_markdown(
     limit: int = TELEGRAM_MARKDOWN_LIMIT,
     is_resume_line: Callable[[str], bool] | None = None,
     prepared: tuple[str, list[dict[str, Any]] | None] | None = None,
+    reply_markup: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, bool]:
     if prepared is None:
         rendered, entities = prepare_telegram(
@@ -104,6 +105,7 @@ async def _send_or_edit_markdown(
             entities=entities,
             reply_to_message_id=reply_to_message_id,
             disable_notification=disable_notification,
+            reply_markup=reply_markup,
         ),
         False,
     )
@@ -485,6 +487,13 @@ async def handle_message(
         else:
             final_answer = f"Error:\n{run_error}"
 
+    # Parse dynamic buttons from response
+    final_answer, response_buttons = parse_response_buttons(final_answer)
+    response_reply_markup = None
+    if response_buttons:
+        response_reply_markup = build_inline_keyboard(response_buttons)
+        logger.debug("[final] dynamic buttons: %s", response_reply_markup)
+
     status = (
         "error" if run_ok is False else ("done" if final_answer.strip() else "error")
     )
@@ -524,6 +533,7 @@ async def handle_message(
         limit=TELEGRAM_MARKDOWN_LIMIT,
         is_resume_line=is_resume_line,
         prepared=(final_rendered, final_entities),
+        reply_markup=response_reply_markup,
     )
     if final_msg is None:
         return
